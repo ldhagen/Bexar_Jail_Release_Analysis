@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  jail-analyzer:
+    build: .
+    container_name: jail-release-analyzer
+    ports:
+      - "8082:80"
+    volumes:
+      - ./data:/var/www/html/data
+      - ./index.php:/var/www/html/index.php
+    environment:
+      - TZ=America/Chicago
+    restart: unless-stopped
