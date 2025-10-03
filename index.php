@@ -391,8 +391,20 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
         .table-container { max-height: 600px; overflow-y: auto; }
         
         .chart-container { margin: 20px 0; padding: 20px; background: #f9f9f9; border-radius: 6px; }
-        .bar { background: linear-gradient(90deg, #007bff 0%, #0056b3 100%); height: 30px; margin: 5px 0; border-radius: 3px; position: relative; min-width: 50px; }
-        .bar-label { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: white; font-weight: bold; font-size: 13px; white-space: nowrap; }
+        .bar { background: linear-gradient(90deg, #007bff 0%, #0056b3 100%); height: 30px; margin: 5px 0; border-radius: 3px; position: relative; min-width: 50px; cursor: pointer; transition: transform 0.2s; }
+        .bar:hover { transform: translateX(5px); box-shadow: 0 2px 8px rgba(0,123,255,0.3); }
+        .bar-label { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: white; font-weight: bold; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100% - 20px); }
+        
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); }
+        .modal-content { background-color: #fefefe; margin: 10% auto; padding: 30px; border: 1px solid #888; border-radius: 8px; width: 80%; max-width: 600px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #007bff; }
+        .modal-header h3 { margin: 0; color: #333; }
+        .close { color: #aaa; font-size: 32px; font-weight: bold; cursor: pointer; line-height: 1; }
+        .close:hover, .close:focus { color: #000; }
+        .modal-body { font-size: 16px; line-height: 1.6; }
+        .modal-stat { display: flex; justify-content: space-between; padding: 10px; background: #f8f9fa; margin: 10px 0; border-radius: 4px; }
+        .modal-stat-label { font-weight: bold; color: #555; }
+        .modal-stat-value { color: #007bff; font-weight: bold; }
         
         .alert { padding: 15px; margin: 20px 0; border-radius: 4px; background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
         .alert-info { background: #d1ecf1; border-color: #bee5eb; color: #0c5460; }
@@ -486,10 +498,10 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                 <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;">
                     <strong>Data Breakdown:</strong>
                     <ul style="margin: 10px 0 0 20px;">
-                        <li><strong><?php echo number_format($trends['total_releases']); ?></strong> total release records (charges/bookings)</li>
-                        <li><strong><?php echo number_format($trends['unique_inmates']); ?></strong> unique individuals released</li>
+                        <li><strong><?php echo number_format($trends['total_releases']); ?></strong> total release records (each charge/booking creates a separate record)</li>
+                        <li><strong><?php echo number_format($trends['unique_inmates']); ?></strong> unique individuals (same person may have multiple release records)</li>
                         <li><strong><?php echo number_format($trends['unique_cases']); ?></strong> unique case numbers</li>
-                        <li>Average: <strong><?php echo number_format($trends['total_releases'] / max($trends['unique_inmates'], 1), 2); ?></strong> releases per person</li>
+                        <li>Average: <strong><?php echo number_format($trends['total_releases'] / max($trends['unique_inmates'], 1), 2); ?></strong> release records per person</li>
                     </ul>
                 </div>
                 
@@ -520,8 +532,10 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                     $maxOffense = max($topOffenses);
                     foreach ($topOffenses as $offense => $count) {
                         $width = ($count / $maxOffense) * 100;
-                        echo '<div class="bar" style="width: ' . $width . '%;">';
-                        echo '<span class="bar-label">' . htmlspecialchars(substr($offense, 0, 50)) . ' (' . number_format($count) . ')</span>';
+                        $fullText = htmlspecialchars($offense);
+                        $shortText = htmlspecialchars(substr($offense, 0, 50));
+                        echo '<div class="bar" style="width: ' . $width . '%;" onclick="showModal(\'' . addslashes($fullText) . '\', ' . $count . ', \'Offense\')">';
+                        echo '<span class="bar-label">' . $shortText . ' (' . number_format($count) . ')</span>';
                         echo '</div>';
                     }
                 }
@@ -545,8 +559,10 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                     $maxCourt = max($topCourts);
                     foreach ($topCourts as $court => $count) {
                         $width = ($count / $maxCourt) * 100;
-                        echo '<div class="bar" style="width: ' . $width . '%;">';
-                        echo '<span class="bar-label">' . htmlspecialchars(substr($court, 0, 50)) . ' (' . number_format($count) . ')</span>';
+                        $fullText = htmlspecialchars($court);
+                        $shortText = htmlspecialchars(substr($court, 0, 50));
+                        echo '<div class="bar" style="width: ' . $width . '%;" onclick="showModal(\'' . addslashes($fullText) . '\', ' . $count . ', \'Court\')">';
+                        echo '<span class="bar-label">' . $shortText . ' (' . number_format($count) . ')</span>';
                         echo '</div>';
                     }
                 }
@@ -570,8 +586,10 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                     $maxAttorney = max($topAttorneys);
                     foreach ($topAttorneys as $attorney => $count) {
                         $width = ($count / $maxAttorney) * 100;
-                        echo '<div class="bar" style="width: ' . $width . '%;">';
-                        echo '<span class="bar-label">' . htmlspecialchars(substr($attorney, 0, 50)) . ' (' . number_format($count) . ')</span>';
+                        $fullText = htmlspecialchars($attorney);
+                        $shortText = htmlspecialchars(substr($attorney, 0, 50));
+                        echo '<div class="bar" style="width: ' . $width . '%;" onclick="showModal(\'' . addslashes($fullText) . '\', ' . $count . ', \'Attorney\')">';
+                        echo '<span class="bar-label">' . $shortText . ' (' . number_format($count) . ')</span>';
                         echo '</div>';
                     }
                 }
@@ -595,8 +613,10 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                     $maxBondType = max($topBondTypes);
                     foreach ($topBondTypes as $bondType => $count) {
                         $width = ($count / $maxBondType) * 100;
-                        echo '<div class="bar" style="width: ' . $width . '%;">';
-                        echo '<span class="bar-label">' . htmlspecialchars(substr($bondType, 0, 50)) . ' (' . number_format($count) . ')</span>';
+                        $fullText = htmlspecialchars($bondType);
+                        $shortText = htmlspecialchars(substr($bondType, 0, 50));
+                        echo '<div class="bar" style="width: ' . $width . '%;" onclick="showModal(\'' . addslashes($fullText) . '\', ' . $count . ', \'Bond Type\')">';
+                        echo '<span class="bar-label">' . $shortText . ' (' . number_format($count) . ')</span>';
                         echo '</div>';
                     }
                 }
@@ -822,6 +842,26 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
         </div>
     </div>
     
+    <!-- Modal for displaying full text -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Details</h3>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="modal-stat">
+                    <span class="modal-stat-label" id="modalLabel">Item:</span>
+                    <span class="modal-stat-value" id="modalText"></span>
+                </div>
+                <div class="modal-stat">
+                    <span class="modal-stat-label">Count:</span>
+                    <span class="modal-stat-value" id="modalCount"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <script>
         function showTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
@@ -835,6 +875,33 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
             url.searchParams.set('top_n', value);
             window.location = url.toString();
         }
+        
+        function showModal(text, count, type) {
+            document.getElementById('modalTitle').textContent = type + ' Details';
+            document.getElementById('modalLabel').textContent = type + ':';
+            document.getElementById('modalText').textContent = text;
+            document.getElementById('modalCount').textContent = count.toLocaleString() + ' occurrences';
+            document.getElementById('detailModal').style.display = 'block';
+        }
+        
+        function closeModal() {
+            document.getElementById('detailModal').style.display = 'none';
+        }
+        
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const modal = document.getElementById('detailModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
     </script>
 </body>
 </html>
