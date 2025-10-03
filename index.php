@@ -50,6 +50,7 @@ class JailReleaseAnalyzer {
     private function initializeTrends() {
         return [
             'release_types' => [],
+            'release_types_by_person' => [],
             'offense_types' => [],
             'bond_types' => [],
             'courts' => [],
@@ -103,27 +104,47 @@ class JailReleaseAnalyzer {
         }
         
         $releaseType = trim($record['ReleaseType'] ?? 'Unknown');
-        if (empty($releaseType)) $releaseType = 'Unknown';
+        if (empty($releaseType)) {
+            $releaseType = 'Unknown';
+        }
         $trends['release_types'][$releaseType] = ($trends['release_types'][$releaseType] ?? 0) + 1;
         
+        // Track release types by unique person
+        if (!empty($inmateName)) {
+            if (!isset($trends['release_types_by_person'][$releaseType])) {
+                $trends['release_types_by_person'][$releaseType] = [];
+            }
+            $trends['release_types_by_person'][$releaseType][$inmateName] = true;
+        }
+        
         $offense = trim($record['OffenseDescription'] ?? 'Unknown');
-        if (empty($offense)) $offense = 'Unknown';
+        if (empty($offense)) {
+            $offense = 'Unknown';
+        }
         $trends['offense_types'][$offense] = ($trends['offense_types'][$offense] ?? 0) + 1;
         
         $bondType = trim($record['BondType'] ?? 'Unknown');
-        if (empty($bondType)) $bondType = 'Unknown';
+        if (empty($bondType)) {
+            $bondType = 'Unknown';
+        }
         $trends['bond_types'][$bondType] = ($trends['bond_types'][$bondType] ?? 0) + 1;
         
         $court = trim($record['Court'] ?? 'Unknown');
-        if (empty($court)) $court = 'Unknown';
+        if (empty($court)) {
+            $court = 'Unknown';
+        }
         $trends['courts'][$court] = ($trends['courts'][$court] ?? 0) + 1;
         
         $attorney = trim($record['AttorneyName'] ?? 'Unknown');
-        if (empty($attorney)) $attorney = 'Unknown';
+        if (empty($attorney)) {
+            $attorney = 'Unknown';
+        }
         $trends['attorneys'][$attorney] = ($trends['attorneys'][$attorney] ?? 0) + 1;
         
         $bondsman = trim($record['BondsmanName'] ?? 'Unknown');
-        if (empty($bondsman)) $bondsman = 'Unknown';
+        if (empty($bondsman)) {
+            $bondsman = 'Unknown';
+        }
         $trends['bondsmen'][$bondsman] = ($trends['bondsmen'][$bondsman] ?? 0) + 1;
         
         $date = $record['ReleaseDate'] ?? '';
@@ -139,12 +160,19 @@ class JailReleaseAnalyzer {
             $trends['bond_sum'] += $amount;
             $trends['bond_count']++;
             
-            if ($amount <= 1000) $trends['bond_ranges']['0-1000']++;
-            elseif ($amount <= 5000) $trends['bond_ranges']['1001-5000']++;
-            elseif ($amount <= 10000) $trends['bond_ranges']['5001-10000']++;
-            elseif ($amount <= 25000) $trends['bond_ranges']['10001-25000']++;
-            elseif ($amount <= 50000) $trends['bond_ranges']['25001-50000']++;
-            else $trends['bond_ranges']['50001+']++;
+            if ($amount <= 1000) {
+                $trends['bond_ranges']['0-1000']++;
+            } elseif ($amount <= 5000) {
+                $trends['bond_ranges']['1001-5000']++;
+            } elseif ($amount <= 10000) {
+                $trends['bond_ranges']['5001-10000']++;
+            } elseif ($amount <= 25000) {
+                $trends['bond_ranges']['10001-25000']++;
+            } elseif ($amount <= 50000) {
+                $trends['bond_ranges']['25001-50000']++;
+            } else {
+                $trends['bond_ranges']['50001+']++;
+            }
         }
     }
     
@@ -162,11 +190,19 @@ class JailReleaseAnalyzer {
         $uniqueInmates = count($trends['unique_inmates']);
         $uniqueCases = count($trends['unique_case_numbers']);
         
+        // Convert release types by person to counts
+        $releaseTypesByPerson = [];
+        foreach ($trends['release_types_by_person'] as $type => $people) {
+            $releaseTypesByPerson[$type] = count($people);
+        }
+        arsort($releaseTypesByPerson);
+        
         return [
             'total_releases' => $totalRecords,
             'unique_inmates' => $uniqueInmates,
             'unique_cases' => $uniqueCases,
             'release_types' => $trends['release_types'],
+            'release_types_by_person' => $releaseTypesByPerson,
             'offense_types' => $trends['offense_types'],
             'bond_types' => $trends['bond_types'],
             'courts' => $trends['courts'],
@@ -181,10 +217,9 @@ class JailReleaseAnalyzer {
         ];
     }
     
-    public function search($directory, $criteria) {
+    public function search($directory, $criteria, $maxResults = 500) {
         $results = [];
         $files = glob($directory . '/*.csv');
-        $maxResults = 100;
         
         foreach ($files as $file) {
             if (count($results) >= $maxResults) break;
@@ -405,6 +440,12 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
         .modal-stat { display: flex; justify-content: space-between; padding: 10px; background: #f8f9fa; margin: 10px 0; border-radius: 4px; }
         .modal-stat-label { font-weight: bold; color: #555; }
         .modal-stat-value { color: #007bff; font-weight: bold; }
+        .modal-detail-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+        .modal-detail-item { padding: 12px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #007bff; }
+        .modal-detail-label { font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 5px; }
+        .modal-detail-value { font-size: 16px; color: #333; font-weight: 500; word-break: break-word; }
+        tr.clickable-row { cursor: pointer; }
+        tr.clickable-row:hover { background: #e3f2fd !important; }
         
         .alert { padding: 15px; margin: 20px 0; border-radius: 4px; background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
         .alert-info { background: #d1ecf1; border-color: #bee5eb; color: #0c5460; }
@@ -648,12 +689,12 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                 ?>
                 </div>
                 
-                <h2>Release Types</h2>
+                <h2>Release Types (by Individual)</h2>
                 <ul class="trend-list">
-                    <?php foreach (array_slice($trends['release_types'], 0, 20, true) as $type => $count): ?>
+                    <?php foreach (array_slice($trends['release_types_by_person'], 0, 20, true) as $type => $count): ?>
                         <li>
                             <span><?php echo htmlspecialchars($type); ?></span>
-                            <strong><?php echo number_format($count); ?></strong>
+                            <strong><?php echo number_format($count); ?> individuals</strong>
                         </li>
                     <?php endforeach; ?>
                 </ul>
@@ -806,6 +847,18 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                 <?php endif; ?>
                 
                 <?php if (count($searchResults) > 0): ?>
+
+                    <script>
+                        // Store search results in JavaScript
+                        var searchResultsData = [];
+                        try {
+                            searchResultsData = JSON.parse(atob('<?php echo base64_encode(json_encode($searchResults)); ?>'));
+                        } catch(e) {
+                            console.error('Error loading search results:', e);
+                            searchResultsData = [];
+                        }
+                    </script>
+
                     <div class="table-container">
                         <table>
                             <thead>
@@ -820,8 +873,8 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($searchResults as $result): ?>
-                                    <tr>
+                                <?php foreach ($searchResults as $index => $result): ?>
+                                    <tr class="clickable-row" data-index="<?php echo $index; ?>" onclick="showRecordByIndex(<?php echo $index; ?>)">
                                         <td><?php echo htmlspecialchars($result['InmateName']); ?></td>
                                         <td><?php echo htmlspecialchars(substr($result['OffenseDescription'], 0, 50)); ?></td>
                                         <td><?php echo htmlspecialchars($result['ReleaseDate']); ?></td>
@@ -834,7 +887,12 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                             </tbody>
                         </table>
                     </div>
-                    <p style="color: #666; margin-top: 10px;">Showing maximum 100 results for performance</p>
+                    <p style="color: #666; margin-top: 10px;">
+                        Showing <?php echo count($searchResults); ?> results 
+                        <?php if (count($searchResults) >= 500): ?>
+                            (limit reached - refine search to see all matches)
+                        <?php endif; ?>
+                    </p>
                 <?php else: ?>
                     <p style="color: #666; margin-top: 20px;">No records found matching your criteria.</p>
                 <?php endif; ?>
@@ -858,6 +916,19 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                     <span class="modal-stat-label">Count:</span>
                     <span class="modal-stat-value" id="modalCount"></span>
                 </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal for record details -->
+    <div id="recordModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3>Release Record Details</h3>
+                <span class="close" onclick="closeRecordModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="modal-detail-grid" id="recordDetails"></div>
             </div>
         </div>
     </div>
@@ -888,11 +959,75 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
             document.getElementById('detailModal').style.display = 'none';
         }
         
+        function showRecordByIndex(index) {
+            if (typeof searchResultsData !== 'undefined' && searchResultsData[index]) {
+                showRecordModal(searchResultsData[index]);
+            }
+        }
+        
+        function showRecordModal(record) {
+            const detailsContainer = document.getElementById('recordDetails');
+            detailsContainer.innerHTML = '';
+            
+            // Define field labels
+            const fieldLabels = {
+                'SONumber': 'SO Number',
+                'InmateName': 'Inmate Name',
+                'Address1': 'Address',
+                'CaseNumber': 'Case Number',
+                'Court': 'Court',
+                'AttorneyName': 'Attorney Name',
+                'ReleaseDate': 'Release Date',
+                'ReleaseTime': 'Release Time',
+                'ReleaseType': 'Release Type',
+                'OffenseDescription': 'Offense Description',
+                'OffenseDate': 'Offense Date',
+                'BondType': 'Bond Type',
+                'BondAmount': 'Bond Amount',
+                'BondsmanName': 'Bondsman Name'
+            };
+            
+            // Create detail items for each field
+            for (const [key, value] of Object.entries(record)) {
+                const detailItem = document.createElement('div');
+                detailItem.className = 'modal-detail-item';
+                
+                const label = document.createElement('div');
+                label.className = 'modal-detail-label';
+                label.textContent = fieldLabels[key] || key;
+                
+                const valueDiv = document.createElement('div');
+                valueDiv.className = 'modal-detail-value';
+                
+                // Format bond amount
+                if (key === 'BondAmount') {
+                    const amount = parseFloat(value);
+                    valueDiv.textContent = amount > 0 ? '$' + amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : 'N/A';
+                } else {
+                    valueDiv.textContent = value || 'N/A';
+                }
+                
+                detailItem.appendChild(label);
+                detailItem.appendChild(valueDiv);
+                detailsContainer.appendChild(detailItem);
+            }
+            
+            document.getElementById('recordModal').style.display = 'block';
+        }
+        
+        function closeRecordModal() {
+            document.getElementById('recordModal').style.display = 'none';
+        }
+        
         // Close modal when clicking outside of it
         window.onclick = function(event) {
-            const modal = document.getElementById('detailModal');
-            if (event.target == modal) {
+            const detailModal = document.getElementById('detailModal');
+            const recordModal = document.getElementById('recordModal');
+            if (event.target == detailModal) {
                 closeModal();
+            }
+            if (event.target == recordModal) {
+                closeRecordModal();
             }
         }
         
@@ -900,6 +1035,7 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
                 closeModal();
+                closeRecordModal();
             }
         });
     </script>
