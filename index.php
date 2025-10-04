@@ -77,7 +77,18 @@ class JailReleaseAnalyzer {
         $count = 0;
         
         if (($handle = fopen($filename, 'r')) !== FALSE) {
+            // Read first line and remove BOM if present
+            $firstLine = fgets($handle);
+            $firstLine = $this->removeBOM($firstLine);
+            
+            // Reset file pointer and parse CSV properly
+            fseek($handle, 0);
             $headers = fgetcsv($handle);
+            
+            // Remove BOM from first header if present
+            if (!empty($headers[0])) {
+                $headers[0] = $this->removeBOM($headers[0]);
+            }
             
             while (($row = fgetcsv($handle)) !== FALSE) {
                 if (count($row) === count($headers)) {
@@ -90,6 +101,12 @@ class JailReleaseAnalyzer {
         }
         
         return $count;
+    }
+    
+    private function removeBOM($text) {
+        $bom = pack('H*','EFBBBF');
+        $text = preg_replace("/^$bom/", '', $text);
+        return $text;
     }
     
     private function updateTrends($record, &$trends) {
@@ -225,7 +242,18 @@ class JailReleaseAnalyzer {
             if (count($results) >= $maxResults) break;
             
             if (($handle = fopen($file, 'r')) !== FALSE) {
+                // Read first line and remove BOM if present
+                $firstLine = fgets($handle);
+                $firstLine = $this->removeBOM($firstLine);
+                
+                // Reset file pointer and parse CSV properly
+                fseek($handle, 0);
                 $headers = fgetcsv($handle);
+                
+                // Remove BOM from first header if present
+                if (!empty($headers[0])) {
+                    $headers[0] = $this->removeBOM($headers[0]);
+                }
                 
                 while (($row = fgetcsv($handle)) !== FALSE) {
                     if (count($results) >= $maxResults) break;
@@ -347,6 +375,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
             case 'search':
                 $criteria = [
+                    'SONumber' => $_POST['so_number'] ?? '',
                     'InmateName' => $_POST['inmate_name'] ?? '',
                     'OffenseDescription' => $_POST['offense'] ?? '',
                     'Court' => $_POST['court'] ?? '',
@@ -798,6 +827,10 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                 
                 <div class="search-grid">
                     <div class="form-group">
+                        <label>SO Number:</label>
+                        <input type="text" name="so_number" placeholder="Search by SO Number" value="<?php echo htmlspecialchars($_POST['so_number'] ?? ''); ?>">
+                    </div>
+                    <div class="form-group">
                         <label>Inmate Name:</label>
                         <input type="text" name="inmate_name" placeholder="Search by name" value="<?php echo htmlspecialchars($_POST['inmate_name'] ?? ''); ?>">
                     </div>
@@ -863,6 +896,7 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                         <table>
                             <thead>
                                 <tr>
+                                    <th>SO Number</th>
                                     <th>Inmate Name</th>
                                     <th>Offense</th>
                                     <th>Release Date</th>
@@ -875,13 +909,14 @@ $topN = isset($_GET['top_n']) ? max(5, min(100, intval($_GET['top_n']))) : 10;
                             <tbody>
                                 <?php foreach ($searchResults as $index => $result): ?>
                                     <tr class="clickable-row" data-index="<?php echo $index; ?>" onclick="showRecordByIndex(<?php echo $index; ?>)">
-                                        <td><?php echo htmlspecialchars($result['InmateName']); ?></td>
-                                        <td><?php echo htmlspecialchars(substr($result['OffenseDescription'], 0, 50)); ?></td>
-                                        <td><?php echo htmlspecialchars($result['ReleaseDate']); ?></td>
-                                        <td><?php echo htmlspecialchars($result['ReleaseType']); ?></td>
-                                        <td><?php echo htmlspecialchars($result['BondType']); ?></td>
-                                        <td>$<?php echo number_format(floatval($result['BondAmount']), 2); ?></td>
-                                        <td><?php echo htmlspecialchars($result['Court']); ?></td>
+                                        <td><?php echo htmlspecialchars($result['SONumber'] ?? ''); ?></td>
+                                        <td><?php echo htmlspecialchars($result['InmateName'] ?? ''); ?></td>
+                                        <td><?php echo htmlspecialchars(substr($result['OffenseDescription'] ?? '', 0, 50)); ?></td>
+                                        <td><?php echo htmlspecialchars($result['ReleaseDate'] ?? ''); ?></td>
+                                        <td><?php echo htmlspecialchars($result['ReleaseType'] ?? ''); ?></td>
+                                        <td><?php echo htmlspecialchars($result['BondType'] ?? ''); ?></td>
+                                        <td>$<?php echo number_format(floatval($result['BondAmount'] ?? 0), 2); ?></td>
+                                        <td><?php echo htmlspecialchars($result['Court'] ?? ''); ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
